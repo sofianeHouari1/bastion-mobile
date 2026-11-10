@@ -1,0 +1,28 @@
+name: APK Bastion
+on: workflow_dispatch
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable }
+      - name: Construire
+        run: |
+          unzip -q bastion_mobile.zip
+          cd bastion_mobile
+          flutter create . --platforms=android --project-name bastion_mobile --org fr.bastion
+          python3 - <<'PY'
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p).read()
+          perms = ''.join('    <uses-permission android:name="android.permission.%s"/>\n' % x for x in ['INTERNET','CAMERA','RECORD_AUDIO','MODIFY_AUDIO_SETTINGS','ACCESS_NETWORK_STATE','BLUETOOTH_CONNECT','WAKE_LOCK'])
+          open(p, 'w').write(s.replace('<application', perms + '    <application', 1))
+          PY
+          flutter pub get
+          flutter build apk --debug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bastion-apk
+          path: bastion_mobile/build/app/outputs/flutter-apk/app-debug.apk
