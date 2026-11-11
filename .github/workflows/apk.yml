@@ -13,14 +13,7 @@ jobs:
         working-directory: bastion_mobile
         run: |
           flutter create . --platforms=android --project-name bastion_mobile --org fr.bastion
-          python3 - <<'PY'
-          p = 'android/app/src/main/AndroidManifest.xml'
-          s = open(p).read()
-          perms = ''.join('    <uses-permission android:name="android.permission.%s"/>\n' % x for x in ['INTERNET','CAMERA','RECORD_AUDIO','MODIFY_AUDIO_SETTINGS','ACCESS_NETWORK_STATE','BLUETOOTH_CONNECT','WAKE_LOCK'])
-          s = s.replace('<application', perms + '    <application', 1)
-          s = s.replace('android:label="bastion_mobile"', 'android:label="Bastion"')
-          open(p, 'w').write(s)
-          PY
+          python3 tools/patch_android.py
           flutter pub get
       - name: Corriger le plugin WebView (regle Gradle recente)
         run: |

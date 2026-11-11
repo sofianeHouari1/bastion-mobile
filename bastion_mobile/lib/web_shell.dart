@@ -1,4 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'notify_service.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'config.dart';
@@ -16,7 +21,8 @@ class WebShell extends StatefulWidget {
   State<WebShell> createState() => _WebShellState();
 }
 
-class _WebShellState extends State<WebShell> {
+class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
+  static const _native = MethodChannel('fr.bastion/native');
   InAppWebViewController? _web;
   double _progress = 0;
   String? _error;
@@ -25,12 +31,62 @@ class _WebShellState extends State<WebShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _askPermissions();
+    initNotifications(onTap: _onNotificationTap);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final fg = state == AppLifecycleState.resumed;
+    FlutterBackgroundService().invoke('fg', {'v': fg});
+    if (fg) {
+      _native.invokeMethod('clearNotifications').catchError((_) {});
+      _saveSession();
+    } else {
+      _saveSession();
+    }
+  }
+
+  void _onNotificationTap(NotificationResponse r) {
+    try {
+      final p = jsonDecode(r.payload ?? '{}') as Map<String, dynamic>;
+      if (p['t'] == 'call') {
+        // L'appel est deja en train de sonner cote serveur : on decroche des que la page le recoit.
+        _web?.evaluateJavascript(source: 'window.__autoAccept = true;');
+      }
+    } catch (_) {}
+  }
+
+  /// Memorise la session (cookie) et les choix de sonnerie pour que le service d'arriere-plan puisse se connecter.
+  Future<void> _saveSession() async {
+    try {
+      final cookies = await CookieManager.instance().getCookies(url: WebUri(widget.config.serverUrl));
+      final header = cookies.map((c) => '${c.name}=${c.value}').join('; ');
+      final prefs = await SharedPreferences.getInstance();
+      if (header.isNotEmpty) {
+        await prefs.setString(kPrefCookie, header);
+        await prefs.setString(kPrefServer, widget.config.serverUrl);
+        final svc = FlutterBackgroundService();
+        if (!await svc.isRunning()) await svc.startService();
+        svc.invoke('fg', {'v': WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed});
+      }
+    } catch (_) {}
   }
 
   Future<void> _askPermissions() async {
     // Demande au demarrage : l'utilisateur n'est plus interrompu au milieu du premier appel.
-    await [Permission.camera, Permission.microphone].request();
+    await [Permission.camera, Permission.microphone, Permission.notification].request();
+    // Sans cette exemption, Android coupe parfois la connexion en arriere-plan et les appels n'arrivent plus.
+    if (!await Permission.ignoreBatteryOptimizations.isGranted) {
+      await Permission.ignoreBatteryOptimizations.request();
+    }
   }
 
   Future<void> _openSettings() async {
@@ -76,12 +132,26 @@ class _WebShellState extends State<WebShell> {
                 databaseEnabled: true,
                 mediaPlaybackRequiresUserGesture: false,
                 allowsInlineMediaPlayback: true,
-                applicationNameForUserAgent: 'BastionMobile/0.2',
+                applicationNameForUserAgent: 'BastionMobile/0.3',
                 useShouldOverrideUrlLoading: true,
                 supportZoom: false,
                 thirdPartyCookiesEnabled: true,
               ),
-              onWebViewCreated: (c) => _web = c,
+              onWebViewCreated: (c) {
+                _web = c;
+                c.addJavaScriptHandler(handlerName: 'speaker', callback: (args) {
+                  _native.invokeMethod('speaker', {'on': args.isNotEmpty && args[0] == true}).catchError((_) {});
+                });
+                c.addJavaScriptHandler(handlerName: 'prefs', callback: (args) async {
+                  if (args.isEmpty || args[0] is! Map) return;
+                  final m = args[0] as Map;
+                  final prefs = await SharedPreferences.getInstance();
+                  if (m['ring'] is String) await prefs.setString(kPrefRing, m['ring']);
+                  if (m['tone'] is String) await prefs.setString(kPrefTone, m['tone']);
+                  _saveSession();
+                });
+              },
+              onLoadStop: (c, u) => _saveSession(),
               onProgressChanged: (c, p) => setState(() => _progress = p / 100),
               onLoadStart: (c, u) => setState(() => _error = null),
               onReceivedError: (c, request, error) {

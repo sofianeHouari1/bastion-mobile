@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'config.dart';
+import 'notify_service.dart';
 import 'web_shell.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final config = await AppConfig.load();
+  await configureBackgroundService();
   runApp(BastionApp(config: config));
 }
 

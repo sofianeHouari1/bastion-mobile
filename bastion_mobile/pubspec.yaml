@@ -1,7 +1,7 @@
 name: bastion_mobile
 description: Application mobile Bastion (communications souveraines) - enveloppe Android de l'interface Bastion.
 publish_to: "none"
-version: 0.2.0+2
+version: 0.3.0+3
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -12,6 +12,8 @@ dependencies:
   flutter_inappwebview: ^6.1.5
   permission_handler: ^11.3.1
   shared_preferences: ^2.2.3
+  flutter_background_service: ^5.1.0
+  flutter_local_notifications: ^17.2.2
 
 dev_dependencies:
   flutter_test:

@@ -1,0 +1,29 @@
+package __PKG__
+
+import android.app.NotificationManager
+import android.content.Context
+import android.media.AudioManager
+import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
+import io.flutter.plugin.common.MethodChannel
+
+class MainActivity : FlutterActivity() {
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "fr.bastion/native").setMethodCallHandler { call, result ->
+            when (call.method) {
+                "speaker" -> {
+                    val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    am.mode = AudioManager.MODE_IN_COMMUNICATION
+                    am.isSpeakerphoneOn = (call.argument<Boolean>("on") ?: false)
+                    result.success(null)
+                }
+                "clearNotifications" -> {
+                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(7001)
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+}
