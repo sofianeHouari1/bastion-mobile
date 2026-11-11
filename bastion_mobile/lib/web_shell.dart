@@ -1,0 +1,144 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'config.dart';
+import 'settings_page.dart';
+
+/// Coque Android : affiche l'interface Bastion de l'instance en plein ecran.
+/// - la connexion Keycloak se fait dans la page, la session est conservee entre deux lancements ;
+/// - camera et micro sont autorises pour les appels (apres l'accord Android de l'utilisateur) ;
+/// - le navigateur integre s'annonce avec "BastionMobile/x.y" : le serveur sait ainsi que la connexion vient du mobile.
+class WebShell extends StatefulWidget {
+  const WebShell({super.key, required this.config});
+  final AppConfig config;
+
+  @override
+  State<WebShell> createState() => _WebShellState();
+}
+
+class _WebShellState extends State<WebShell> {
+  InAppWebViewController? _web;
+  double _progress = 0;
+  String? _error;
+  int _generation = 0; // change pour recreer la page apres un changement de serveur
+
+  @override
+  void initState() {
+    super.initState();
+    _askPermissions();
+  }
+
+  Future<void> _askPermissions() async {
+    // Demande au demarrage : l'utilisateur n'est plus interrompu au milieu du premier appel.
+    await [Permission.camera, Permission.microphone].request();
+  }
+
+  Future<void> _openSettings() async {
+    final changed = await Navigator.of(context).push<bool>(MaterialPageRoute(builder: (_) => SettingsPage(config: widget.config)));
+    if (changed == true && mounted) {
+      setState(() {
+        _error = null;
+        _progress = 0;
+        _generation++;
+      });
+    }
+  }
+
+  Future<void> _retry() async {
+    setState(() {
+      _error = null;
+      _progress = 0;
+    });
+    await _web?.reload();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final host = Uri.tryParse(widget.config.serverUrl)?.host ?? '';
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (_web != null && await _web!.canGoBack()) {
+          await _web!.goBack();
+        }
+        // sinon : on reste dans l'appli (le retour ne ferme pas Bastion par erreur)
+      },
+      child: Scaffold(
+        body: SafeArea(
+          child: Stack(children: [
+            InAppWebView(
+              key: ValueKey('web-$_generation-${widget.config.serverUrl}'),
+              initialUrlRequest: URLRequest(url: WebUri(widget.config.serverUrl)),
+              initialSettings: InAppWebViewSettings(
+                javaScriptEnabled: true,
+                domStorageEnabled: true,
+                databaseEnabled: true,
+                mediaPlaybackRequiresUserGesture: false,
+                allowsInlineMediaPlayback: true,
+                applicationNameForUserAgent: 'BastionMobile/0.2',
+                useShouldOverrideUrlLoading: true,
+                supportZoom: false,
+                thirdPartyCookiesEnabled: true,
+              ),
+              onWebViewCreated: (c) => _web = c,
+              onProgressChanged: (c, p) => setState(() => _progress = p / 100),
+              onLoadStart: (c, u) => setState(() => _error = null),
+              onReceivedError: (c, request, error) {
+                // On ne signale que les echecs de la page principale (pas ceux d'une image ou d'un script).
+                if (request.isForMainFrame ?? false) {
+                  setState(() => _error = error.description);
+                }
+              },
+              onPermissionRequest: (c, request) async {
+                // La page Bastion de l'instance configuree peut utiliser camera et micro, rien d'autre.
+                final ok = request.origin.host == host;
+                return PermissionResponse(
+                  resources: request.resources,
+                  action: ok ? PermissionResponseAction.GRANT : PermissionResponseAction.DENY,
+                );
+              },
+              shouldOverrideUrlLoading: (c, action) async {
+                final scheme = action.request.url?.scheme ?? '';
+                // Seuls http(s) restent dans l'appli ; tel:, intent:, etc. sont ignores.
+                return (scheme == 'https' || scheme == 'http') ? NavigationActionPolicy.ALLOW : NavigationActionPolicy.CANCEL;
+              },
+            ),
+            if (_progress < 1 && _error == null) LinearProgressIndicator(value: _progress == 0 ? null : _progress, minHeight: 3),
+            if (_error != null) _ErrorView(message: _error!, server: widget.config.serverUrl, onRetry: _retry, onSettings: _openSettings),
+          ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  const _ErrorView({required this.message, required this.server, required this.onRetry, required this.onSettings});
+  final String message;
+  final String server;
+  final VoidCallback onRetry;
+  final VoidCallback onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.cloud_off_outlined, size: 56),
+          const SizedBox(height: 16),
+          const Text('Bastion est injoignable', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 8),
+          Text(server, textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(message, textAlign: TextAlign.center, style: const TextStyle(fontSize: 12)),
+          const SizedBox(height: 24),
+          FilledButton(onPressed: onRetry, child: const Text('Réessayer')),
+          TextButton(onPressed: onSettings, child: const Text('Changer de serveur')),
+        ]),
+      ),
+    );
+  }
+}
