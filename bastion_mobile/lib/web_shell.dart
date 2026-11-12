@@ -34,6 +34,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _askPermissions();
+    _native.invokeMethod('clearNotifications').catchError((_) {});
     initNotifications(onTap: _onNotificationTap);
   }
 
@@ -49,13 +50,13 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
     FlutterBackgroundService().invoke('fg', {'v': fg});
     if (fg) {
       _native.invokeMethod('clearNotifications').catchError((_) {});
-      _saveSession();
-    } else {
-      _saveSession();
+      Future.delayed(const Duration(seconds: 2), () => _native.invokeMethod('clearNotifications').catchError((_) {}));
     }
+    _saveSession();
   }
 
   void _onNotificationTap(NotificationResponse r) {
+    _native.invokeMethod('clearNotifications').catchError((_) {});
     try {
       final p = jsonDecode(r.payload ?? '{}') as Map<String, dynamic>;
       if (p['t'] == 'call') {

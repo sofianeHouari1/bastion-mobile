@@ -19,7 +19,9 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "clearNotifications" -> {
-                    (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).cancel(7001)
+                    val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    // Efface appels et messages, mais garde la notification fixe du service (id 4242).
+                    for (n in nm.activeNotifications) { if (n.id != 4242) nm.cancel(n.tag, n.id) }
                     result.success(null)
                 }
                 else -> result.notImplemented()
