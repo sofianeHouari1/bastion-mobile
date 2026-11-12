@@ -32,7 +32,7 @@ const _ringRaw = {
 /// Initialise le plugin de notifications (appele dans l'appli ET dans le service).
 Future<void> initNotifications({void Function(NotificationResponse)? onTap}) async {
   await notifications.initialize(
-    const InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher')),
+    const InitializationSettings(android: AndroidInitializationSettings('@drawable/ic_stat_bastion')),
     onDidReceiveNotificationResponse: onTap,
   );
   final android = notifications.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();

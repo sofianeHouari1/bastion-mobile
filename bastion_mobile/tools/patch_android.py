@@ -51,3 +51,12 @@ for d in glob.glob('android_res/icons/mipmap-*'):
 for f in glob.glob('android/app/src/main/res/mipmap-anydpi*/ic_launcher*.xml'):
     os.remove(f)
 print('icone Bastion appliquee')
+
+# --- Petite icone des notifications (bouclier blanc sur fond transparent) :
+#     ic_stat_bastion pour les notifications de l'appli, ic_bg_service_small pour la notification permanente du service
+for d in glob.glob('android_res/notif/drawable-*'):
+    dest = os.path.join('android/app/src/main/res', os.path.basename(d))
+    os.makedirs(dest, exist_ok=True)
+    for n in ('ic_stat_bastion.png', 'ic_bg_service_small.png'):
+        shutil.copy(os.path.join(d, 'ic_stat_bastion.png'), os.path.join(dest, n))
+print('icone de notification Bastion appliquee')
