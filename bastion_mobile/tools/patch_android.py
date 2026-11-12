@@ -41,3 +41,13 @@ kt = glob.glob('android/app/src/main/kotlin/**/MainActivity.kt', recursive=True)
 pkg = re.search(r'package\s+([\w.]+)', open(kt).read()).group(1)
 open(kt, 'w').write(open('android_res/MainActivity.kt.tmpl').read().replace('__PKG__', pkg))
 print('patch Android applique, package', pkg)
+
+# --- Icone de l'application (bouclier Bastion)
+for d in glob.glob('android_res/icons/mipmap-*'):
+    dest = os.path.join('android/app/src/main/res', os.path.basename(d))
+    os.makedirs(dest, exist_ok=True)
+    shutil.copy(os.path.join(d, 'ic_launcher.png'), dest)
+# les icones adaptatives generees par Flutter (si presentes) supplanteraient les PNG : on les retire
+for f in glob.glob('android/app/src/main/res/mipmap-anydpi*/ic_launcher*.xml'):
+    os.remove(f)
+print('icone Bastion appliquee')
