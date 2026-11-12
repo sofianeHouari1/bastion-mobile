@@ -117,10 +117,19 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
       canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
-        if (_web != null && await _web!.canGoBack()) {
+        // 1) la page Bastion traite le retour elle-meme (ferme la discussion, une fenetre, revient a la liste)
+        try {
+          final r = await _web?.evaluateJavascript(source: 'window.__androidBack ? window.__androidBack() : false');
+          if (r == true) return;
+        } catch (_) {}
+        // 2) pages de connexion (Keycloak) : retour classique du navigateur
+        final url = (await _web?.getUrl())?.toString() ?? '';
+        if (url.isNotEmpty && !url.startsWith(widget.config.serverUrl) && _web != null && await _web!.canGoBack()) {
           await _web!.goBack();
+          return;
         }
-        // sinon : on reste dans l'appli (le retour ne ferme pas Bastion par erreur)
+        // 3) sur la liste des discussions : l'appli passe en arriere-plan (elle reste connectee pour les notifications)
+        _native.invokeMethod('minimize').catchError((_) {});
       },
       child: Scaffold(
         body: SafeArea(

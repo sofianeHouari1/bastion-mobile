@@ -24,6 +24,7 @@ class MainActivity : FlutterActivity() {
                     for (n in nm.activeNotifications) { if (n.id != 4242) nm.cancel(n.tag, n.id) }
                     result.success(null)
                 }
+                "minimize" -> { moveTaskToBack(true); result.success(null) }
                 else -> result.notImplemented()
             }
         }
