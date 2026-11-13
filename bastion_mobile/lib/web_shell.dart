@@ -150,8 +150,19 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
               ),
               onWebViewCreated: (c) {
                 _web = c;
-                c.addJavaScriptHandler(handlerName: 'speaker', callback: (args) {
-                  _native.invokeMethod('speaker', {'on': args.isNotEmpty && args[0] == true}).catchError((_) {});
+                // Haut-parleur : renvoie l'etat reel obtenu (true = son sur le haut-parleur) pour que le bouton l'affiche.
+                c.addJavaScriptHandler(handlerName: 'speaker', callback: (args) async {
+                  try {
+                    final r = await _native.invokeMethod('speaker', {'on': args.isNotEmpty && args[0] == true});
+                    return r == true;
+                  } catch (_) {
+                    return null;
+                  }
+                });
+                // Fin d'appel : rend le son au mode normal (sinon le telephone peut rester bloque sur le haut-parleur ou l'ecouteur).
+                c.addJavaScriptHandler(handlerName: 'audioReset', callback: (args) async {
+                  try { await _native.invokeMethod('audioReset'); } catch (_) {}
+                  return true;
                 });
                 c.addJavaScriptHandler(handlerName: 'prefs', callback: (args) async {
                   if (args.isEmpty || args[0] is! Map) return;

@@ -2,7 +2,9 @@ package __PKG__
 
 import android.app.NotificationManager
 import android.content.Context
+import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -13,9 +15,38 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "fr.bastion/native").setMethodCallHandler { call, result ->
             when (call.method) {
                 "speaker" -> {
+                    // Android 12 et plus : isSpeakerphoneOn est ignore pendant un appel WebRTC ;
+                    // il faut choisir explicitement le haut-parleur comme peripherique de communication.
+                    val on = call.argument<Boolean>("on") ?: false
                     val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
                     am.mode = AudioManager.MODE_IN_COMMUNICATION
-                    am.isSpeakerphoneOn = (call.argument<Boolean>("on") ?: false)
+                    var actual = on
+                    try {
+                        if (Build.VERSION.SDK_INT >= 31) {
+                            if (on) {
+                                val dev = am.availableCommunicationDevices.firstOrNull { it.type == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER }
+                                actual = dev != null && am.setCommunicationDevice(dev)
+                            } else {
+                                am.clearCommunicationDevice()
+                                actual = false
+                            }
+                        } else {
+                            @Suppress("DEPRECATION")
+                            am.isSpeakerphoneOn = on
+                            @Suppress("DEPRECATION")
+                            actual = am.isSpeakerphoneOn
+                        }
+                    } catch (e: Exception) { actual = false }
+                    result.success(actual)
+                }
+                "audioReset" -> {
+                    val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                    try {
+                        if (Build.VERSION.SDK_INT >= 31) am.clearCommunicationDevice()
+                        @Suppress("DEPRECATION")
+                        am.isSpeakerphoneOn = false
+                        am.mode = AudioManager.MODE_NORMAL
+                    } catch (e: Exception) {}
                     result.success(null)
                 }
                 "clearNotifications" -> {
