@@ -155,15 +155,15 @@ Future<void> onServiceStart(ServiceInstance service) async {
 
 int _idFor(String s) => s.hashCode & 0x7fffffff;
 
-Future<void> _show(Map<String, dynamic> ev, SharedPreferences prefs) async {
-  final name = (ev['name'] ?? ev['from'] ?? 'Bastion').toString();
-  final from = (ev['from'] ?? '').toString();
-  if (ev['type'] == 'call') {
+const kCallNotifId = 7001;
+
+/// Notification d'appel entrant (plein ecran, sonnerie repetee, bouton Decrocher).
+/// Utilisee par le service d'arriere-plan ET par l'appli quand la page recoit l'appel alors qu'elle est en veille.
+Future<void> showCallNotification(SharedPreferences prefs, {required String name, String from = '', bool group = false, String salon = ''}) async {
     final ring = _ringRaw.containsKey(prefs.getString(kPrefRing)) ? prefs.getString(kPrefRing)! : 'classique';
-    final group = ev['group'] == true;
-    final title = group ? 'Appel de groupe · ${ev['salon'] ?? 'Salon'}' : 'Appel de $name';
+    final title = group ? 'Appel de groupe · ${salon.isEmpty ? 'Salon' : salon}' : 'Appel de $name';
     await notifications.show(
-      7001,
+      kCallNotifId,
       title,
       group ? '$name vous appelle' : 'Appel entrant · Bastion',
       NotificationDetails(
@@ -187,6 +187,13 @@ Future<void> _show(Map<String, dynamic> ev, SharedPreferences prefs) async {
       ),
       payload: jsonEncode({'t': 'call', 'from': from}),
     );
+}
+
+Future<void> _show(Map<String, dynamic> ev, SharedPreferences prefs) async {
+  final name = (ev['name'] ?? ev['from'] ?? 'Bastion').toString();
+  final from = (ev['from'] ?? '').toString();
+  if (ev['type'] == 'call') {
+    await showCallNotification(prefs, name: name, from: from, group: ev['group'] == true, salon: (ev['salon'] ?? '').toString());
   } else {
     final silent = prefs.getString(kPrefTone) == 'aucun';
     await notifications.show(

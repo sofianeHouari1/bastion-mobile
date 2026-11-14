@@ -28,6 +28,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
   double _progress = 0;
   String? _error;
   int _generation = 0; // change pour recreer la page apres un changement de serveur
+  bool _resumed = true;
 
   @override
   void initState() {
@@ -60,6 +61,12 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final fg = state == AppLifecycleState.resumed;
+    _resumed = fg;
+    if (fg) {
+      // La page a pu etre mise en veille par Android : on la reveille et elle affiche tout de suite l'appel en cours.
+      _web?.resumeTimers().catchError((_) {});
+      _web?.evaluateJavascript(source: 'window.__bmResume && window.__bmResume();').catchError((_) => null);
+    }
     FlutterBackgroundService().invoke('fg', {'v': fg});
     if (fg) {
       _native.invokeMethod('clearNotifications').catchError((_) {});
@@ -176,6 +183,19 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                 // Fin d'appel : rend le son au mode normal (sinon le telephone peut rester bloque sur le haut-parleur ou l'ecouteur).
                 c.addJavaScriptHandler(handlerName: 'audioReset', callback: (args) async {
                   try { await _native.invokeMethod('audioReset'); } catch (_) {}
+                  return true;
+                });
+                // Appel recu par la page : si l'appli n'est pas au premier plan, vraie notification d'appel (plein ecran + Decrocher).
+                c.addJavaScriptHandler(handlerName: 'incomingCall', callback: (args) async {
+                  if (_resumed) return false;
+                  final m = (args.isNotEmpty && args[0] is Map) ? args[0] as Map : const {};
+                  final prefs = await SharedPreferences.getInstance();
+                  await showCallNotification(prefs, name: (m['name'] ?? 'Correspondant').toString(), from: (m['from'] ?? '').toString());
+                  return true;
+                });
+                // Fin d'appel (decroche, refuse, raccroche) : on retire la notification et sa sonnerie.
+                c.addJavaScriptHandler(handlerName: 'callEnded', callback: (args) async {
+                  await notifications.cancel(kCallNotifId);
                   return true;
                 });
                 c.addJavaScriptHandler(handlerName: 'prefs', callback: (args) async {
