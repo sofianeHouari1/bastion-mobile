@@ -27,6 +27,12 @@ const _ringRaw = {
   'doux': 'ring_doux',
   'cristal': 'ring_cristal',
   'sonar': 'ring_sonar',
+  'marimba': 'ring_marimba',
+  'carillon': 'ring_carillon',
+  'harpe': 'ring_harpe',
+  'pulsation': 'ring_pulsation',
+  'bureau': 'ring_bureau',
+  'retro': 'ring_retro',
 };
 
 /// Initialise le plugin de notifications (appele dans l'appli ET dans le service).
