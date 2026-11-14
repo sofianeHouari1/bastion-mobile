@@ -36,6 +36,19 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
     _askPermissions();
     _native.invokeMethod('clearNotifications').catchError((_) {});
     initNotifications(onTap: _onNotificationTap);
+    _native.setMethodCallHandler((call) async {
+      if (call.method == 'openLink') _openLink(call.arguments as String?);
+      return null;
+    });
+  }
+
+  /// Lien d'un e-mail Bastion (invitation, rappel) : on l'ouvre dans la page si c'est le meme serveur.
+  void _openLink(String? link) {
+    if (link == null || link.isEmpty) return;
+    final u = Uri.tryParse(link);
+    final server = Uri.tryParse(widget.config.serverUrl);
+    if (u == null || server == null || u.scheme != 'https' || u.host != server.host) return;
+    _web?.loadUrl(urlRequest: URLRequest(url: WebUri(link)));
   }
 
   @override
@@ -150,6 +163,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
               ),
               onWebViewCreated: (c) {
                 _web = c;
+                _native.invokeMethod('initialLink').then((l) => _openLink(l as String?)).catchError((_) {});
                 // Haut-parleur : renvoie l'etat reel obtenu (true = son sur le haut-parleur) pour que le bouton l'affiche.
                 c.addJavaScriptHandler(handlerName: 'speaker', callback: (args) async {
                   try {

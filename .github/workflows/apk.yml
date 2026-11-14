@@ -9,6 +9,14 @@ jobs:
         with: { distribution: temurin, java-version: "17" }
       - uses: subosito/flutter-action@v2
         with: { channel: stable }
+      - name: Cle de signature stable (memes mises a jour sans desinstaller, liens des e-mails)
+        env:
+          KS: ${{ secrets.ANDROID_DEBUG_KEYSTORE_B64 }}
+        run: |
+          mkdir -p ~/.android
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > ~/.android/debug.keystore; echo "cle : secret GitHub"
+          elif [ -f bastion_mobile/android_res/signing/debug.keystore ]; then cp bastion_mobile/android_res/signing/debug.keystore ~/.android/debug.keystore; echo "cle : fichier du depot"
+          else echo "pas de cle stable : signature aleatoire"; fi
       - name: Preparer le projet Android
         working-directory: bastion_mobile
         run: |

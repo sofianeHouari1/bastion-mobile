@@ -16,6 +16,15 @@ service = ('        <service android:name="id.flutter.flutter_background_service
            'android:foregroundServiceType="remoteMessaging" tools:replace="android:foregroundServiceType" tools:node="merge"/>\n')
 s = s.replace('</application>', service + '    </application>', 1)
 s = s.replace('<activity ', '<activity android:showWhenLocked="true" android:turnScreenOn="true" ', 1)
+# Liens des e-mails (invitations, rappels) : ouverts directement dans l'appli (App Links verifies par
+# https://bastion-secure.group/.well-known/assetlinks.json)
+links = ('        <intent-filter android:autoVerify="true">\n'
+         '            <action android:name="android.intent.action.VIEW"/>\n'
+         '            <category android:name="android.intent.category.DEFAULT"/>\n'
+         '            <category android:name="android.intent.category.BROWSABLE"/>\n'
+         '            <data android:scheme="https" android:host="bastion-secure.group" android:pathPrefix="/webrtc-ihm/"/>\n'
+         '        </intent-filter>\n')
+s = s.replace('</activity>', links + '        </activity>', 1)
 open(p, 'w').write(s)
 
 # --- Sonneries natives
