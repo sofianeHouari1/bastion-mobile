@@ -165,13 +165,13 @@ const kCallNotifId = 7001;
 
 /// Notification d'appel entrant (plein ecran, sonnerie repetee, bouton Decrocher).
 /// Utilisee par le service d'arriere-plan ET par l'appli quand la page recoit l'appel alors qu'elle est en veille.
-Future<void> showCallNotification(SharedPreferences prefs, {required String name, String from = '', bool group = false, String salon = ''}) async {
+Future<void> showCallNotification(SharedPreferences prefs, {required String name, String from = '', bool group = false, String salon = '', bool meeting = false, String title = ''}) async {
     final ring = _ringRaw.containsKey(prefs.getString(kPrefRing)) ? prefs.getString(kPrefRing)! : 'classique';
-    final title = group ? 'Appel de groupe · ${salon.isEmpty ? 'Salon' : salon}' : 'Appel de $name';
+    final head = meeting ? 'Réunion · ${title.isEmpty ? 'maintenant' : title}' : group ? 'Appel de groupe · ${salon.isEmpty ? 'Salon' : salon}' : 'Appel de $name';
     await notifications.show(
       kCallNotifId,
-      title,
-      group ? '$name vous appelle' : 'Appel entrant · Bastion',
+      head,
+      meeting ? 'C\'est l\'heure de la réunion · organisée par $name' : group ? '$name vous appelle' : 'Appel entrant · Bastion',
       NotificationDetails(
         android: AndroidNotificationDetails(
           'calls_$ring',
@@ -188,7 +188,7 @@ Future<void> showCallNotification(SharedPreferences prefs, {required String name
           audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
           additionalFlags: Int32List.fromList(<int>[4]), // FLAG_INSISTENT : la sonnerie se repete
           timeoutAfter: 40000,
-          actions: const [AndroidNotificationAction('accept', 'Décrocher', showsUserInterface: true)],
+          actions: [AndroidNotificationAction('accept', meeting ? 'Rejoindre' : 'Décrocher', showsUserInterface: true)],
         ),
       ),
       payload: jsonEncode({'t': 'call', 'from': from}),
@@ -199,7 +199,8 @@ Future<void> _show(Map<String, dynamic> ev, SharedPreferences prefs) async {
   final name = (ev['name'] ?? ev['from'] ?? 'Bastion').toString();
   final from = (ev['from'] ?? '').toString();
   if (ev['type'] == 'call') {
-    await showCallNotification(prefs, name: name, from: from, group: ev['group'] == true, salon: (ev['salon'] ?? '').toString());
+    await showCallNotification(prefs, name: name, from: from, group: ev['group'] == true, salon: (ev['salon'] ?? '').toString(),
+        meeting: ev['meeting'] == true, title: (ev['title'] ?? '').toString());
   } else {
     final silent = prefs.getString(kPrefTone) == 'aucun';
     await notifications.show(
