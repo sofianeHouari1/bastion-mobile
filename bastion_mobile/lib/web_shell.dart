@@ -218,7 +218,9 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
               },
               onPermissionRequest: (c, request) async {
                 // La page Bastion de l'instance configuree peut utiliser camera et micro, rien d'autre.
-                final ok = request.origin.host == host;
+                // La salle video (visio a plusieurs) est sur un sous-domaine de la meme instance (ex. visio.<domaine>).
+                final o = request.origin.host;
+                final ok = o == host || (host.isNotEmpty && o.endsWith('.$host'));
                 return PermissionResponse(
                   resources: request.resources,
                   action: ok ? PermissionResponseAction.GRANT : PermissionResponseAction.DENY,
