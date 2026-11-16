@@ -1,5 +1,12 @@
 name: APK Bastion
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      marque:
+        description: "Appli à construire : bastion ou myselftherapy"
+        default: bastion
+        type: choice
+        options: [bastion, myselftherapy]
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -20,8 +27,10 @@ jobs:
       - name: Preparer le projet Android
         working-directory: bastion_mobile
         run: |
-          flutter create . --platforms=android --project-name bastion_mobile --org fr.bastion
+          ORG=fr.bastion; if [ "${{ inputs.marque }}" = "myselftherapy" ]; then ORG=eu.myselftherapy; fi
+          flutter create . --platforms=android --project-name bastion_mobile --org $ORG
           python3 tools/patch_android.py
+          python3 tools/brand.py "${{ inputs.marque }}"
           flutter pub get
       - name: Corriger le plugin WebView (regle Gradle recente)
         run: |
@@ -38,5 +47,5 @@ jobs:
         run: flutter build apk --debug
       - uses: actions/upload-artifact@v4
         with:
-          name: bastion-apk
+          name: ${{ inputs.marque || 'bastion' }}-apk
           path: bastion_mobile/build/app/outputs/flutter-apk/app-debug.apk
