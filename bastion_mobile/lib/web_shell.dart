@@ -102,6 +102,41 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  /// Nom du fichier annonce par le serveur (Content-Disposition), sinon dernier morceau de l'adresse.
+  static String _fileName(DownloadStartRequest req) {
+    final cd = req.contentDisposition ?? '';
+    final star = RegExp(r"filename\*=(?:UTF-8|utf-8)''([^;]+)").firstMatch(cd);
+    if (star != null) {
+      try { return Uri.decodeComponent(star.group(1)!.trim()); } catch (_) {}
+    }
+    final plain = RegExp(r'filename="?([^";]+)"?').firstMatch(cd);
+    if (plain != null) return plain.group(1)!.trim();
+    if ((req.suggestedFilename ?? '').isNotEmpty) return req.suggestedFilename!;
+    final segs = req.url.pathSegments.where((x) => x.isNotEmpty).toList();
+    final last = segs.isEmpty ? 'document' : segs.last;
+    return (req.mimeType == 'application/pdf' && !last.toLowerCase().endsWith('.pdf')) ? '$last.pdf' : last;
+  }
+
+  /// Fichier demande par la page : telecharge par Android (avec la session) dans le dossier Telechargements.
+  Future<void> _download(DownloadStartRequest req) async {
+    final server = Uri.tryParse(widget.config.serverUrl);
+    if (server == null || req.url.host != server.host || req.url.scheme != 'https') return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final cookies = await CookieManager.instance().getCookies(url: req.url);
+      final name = await _native.invokeMethod('download', {
+        'url': req.url.toString(),
+        'name': _fileName(req),
+        'mime': req.mimeType ?? '',
+        'cookie': cookies.map((c) => '${c.name}=${c.value}').join('; '),
+        'ua': req.userAgent ?? '',
+      });
+      messenger.showSnackBar(SnackBar(content: Text('Téléchargement de « $name » : il arrive dans Téléchargements.')));
+    } catch (e) {
+      messenger.showSnackBar(const SnackBar(content: Text('Téléchargement impossible.')));
+    }
+  }
+
   Future<void> _askPermissions() async {
     // Demande au demarrage : l'utilisateur n'est plus interrompu au milieu du premier appel.
     await [Permission.camera, Permission.microphone, Permission.notification].request();
@@ -167,7 +202,9 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                 useShouldOverrideUrlLoading: true,
                 supportZoom: false,
                 thirdPartyCookiesEnabled: true,
+                useOnDownloadStart: true,
               ),
+              onDownloadStartRequest: (c, req) => _download(req),
               onWebViewCreated: (c) {
                 _web = c;
                 _native.invokeMethod('initialLink').then((l) => _openLink(l as String?)).catchError((_) {});

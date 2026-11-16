@@ -80,6 +80,28 @@ class MainActivity : FlutterActivity() {
                     result.success(null)
                 }
                 "minimize" -> { moveTaskToBack(true); result.success(null) }
+                // Telechargement demande par la page (PDF de compte rendu, fichier d'un dossier...) : confie au
+                // gestionnaire de telechargements d'Android, avec la session de l'utilisateur ; arrive dans Telechargements.
+                "download" -> {
+                    try {
+                        val url = call.argument<String>("url")!!
+                        val name = (call.argument<String>("name") ?: "document").replace(Regex("[\\\\/:*?\"<>|]"), "_")
+                        val mime = call.argument<String>("mime") ?: ""
+                        val req = android.app.DownloadManager.Request(android.net.Uri.parse(url))
+                        val cookie = call.argument<String>("cookie") ?: ""
+                        if (cookie.isNotEmpty()) req.addRequestHeader("Cookie", cookie)
+                        val ua = call.argument<String>("ua") ?: ""
+                        if (ua.isNotEmpty()) req.addRequestHeader("User-Agent", ua)
+                        if (mime.isNotEmpty()) req.setMimeType(mime)
+                        req.setTitle(name)
+                        req.setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                        req.setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
+                        (getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager).enqueue(req)
+                        result.success(name)
+                    } catch (e: Exception) {
+                        result.error("download", e.message, null)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
