@@ -1,0 +1,41 @@
+name: Appli Windows
+on:
+  workflow_dispatch:
+    inputs:
+      marque:
+        description: "Appli à construire : bastion ou myselftherapy"
+        default: bastion
+        type: choice
+        options: [bastion, myselftherapy]
+permissions:
+  contents: write   # publier l'installateur (Releases) : le serveur du cabinet le recupere et le sert depuis son domaine
+jobs:
+  exe:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Preparer la marque
+        run: node prepare.js "${{ inputs.marque }}" "${{ github.run_number }}"
+      - name: Installer les outils
+        run: npm install --no-audit --no-fund
+      - name: Construire l'installateur
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --win nsis --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.marque }}-windows
+          path: desktop/dist/${{ inputs.marque }}-setup.exe
+      - name: Publier pour le telechargement depuis le site du cabinet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          M="${{ inputs.marque }}"
+          gh release create "$M-win-${{ github.run_number }}" "dist/$M-setup.exe" --target "${{ github.sha }}" \
+            --title "$M Windows ${{ github.run_number }}" --notes "Appli Windows $M, compilation ${{ github.run_number }}" --latest=false

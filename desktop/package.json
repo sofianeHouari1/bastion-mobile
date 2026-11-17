@@ -1,0 +1,14 @@
+{
+  "name": "bastion-desktop",
+  "productName": "Bastion",
+  "version": "1.0.0",
+  "description": "Appli de bureau privée (Windows)",
+  "main": "main.js",
+  "author": "Bastion",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  }
+}
