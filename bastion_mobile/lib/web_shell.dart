@@ -8,6 +8,7 @@ import 'notify_service.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'config.dart';
+import 'build_info.dart';
 import 'settings_page.dart';
 
 /// Coque Android : affiche l'interface Bastion de l'instance en plein ecran.
@@ -198,7 +199,7 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                 databaseEnabled: true,
                 mediaPlaybackRequiresUserGesture: false,
                 allowsInlineMediaPlayback: true,
-                applicationNameForUserAgent: 'BastionMobile/0.3',
+                applicationNameForUserAgent: 'BastionMobile/0.3 build/$kBuild',
                 useShouldOverrideUrlLoading: true,
                 supportZoom: false,
                 thirdPartyCookiesEnabled: true,

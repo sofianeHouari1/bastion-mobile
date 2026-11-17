@@ -7,6 +7,8 @@ on:
         default: bastion
         type: choice
         options: [bastion, myselftherapy]
+permissions:
+  contents: write   # publier l'APK (Releases) : le serveur du cabinet la recupere et la sert depuis son propre domaine
 jobs:
   apk:
     runs-on: ubuntu-latest
@@ -44,8 +46,18 @@ jobs:
         run: flutter analyze || true
       - name: Construire
         working-directory: bastion_mobile
-        run: flutter build apk --debug
+        run: |
+          echo "const int kBuild = ${{ github.run_number }};" > lib/build_info.dart
+          flutter build apk --debug --build-number=${{ github.run_number }} --build-name=1.0.${{ github.run_number }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.marque || 'bastion' }}-apk
           path: bastion_mobile/build/app/outputs/flutter-apk/app-debug.apk
+      - name: Publier pour le telechargement depuis le site du cabinet
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          M="${{ inputs.marque || 'bastion' }}"
+          cp bastion_mobile/build/app/outputs/flutter-apk/app-debug.apk "$M.apk"
+          gh release create "$M-${{ github.run_number }}" "$M.apk" --target "${{ github.sha }}" \
+            --title "$M ${{ github.run_number }}" --notes "Appli Android $M, compilation ${{ github.run_number }}" --latest=false
