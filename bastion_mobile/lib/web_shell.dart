@@ -218,6 +218,10 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                   }
                 });
                 // Fin d'appel : rend le son au mode normal (sinon le telephone peut rester bloque sur le haut-parleur ou l'ecouteur).
+                c.addJavaScriptHandler(handlerName: 'callAudio', callback: (args) async {
+                  try { await _native.invokeMethod('callAudio'); } catch (_) {}
+                  return null;
+                });
                 c.addJavaScriptHandler(handlerName: 'audioReset', callback: (args) async {
                   try { await _native.invokeMethod('audioReset'); } catch (_) {}
                   return true;
