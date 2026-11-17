@@ -47,6 +47,14 @@ class MainActivity : FlutterActivity() {
         ch.setMethodCallHandler { call, result ->
             when (call.method) {
                 "initialLink" -> { result.success(pendingLink); pendingLink = null }
+                "openExternal" -> {
+                    // Mise a jour de l'appli : le telechargement de l'APK s'ouvre dans le navigateur du telephone
+                    val u = call.argument<String>("url") ?: ""
+                    if (u.startsWith("https://")) {
+                        try { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); result.success(true) }
+                        catch (e: Exception) { result.success(false) }
+                    } else result.success(false)
+                }
                 "speaker" -> {
                     // Android 12 et plus : isSpeakerphoneOn est ignore pendant un appel WebRTC ;
                     // il faut choisir explicitement le haut-parleur comme peripherique de communication.

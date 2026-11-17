@@ -223,6 +223,9 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                   try { await _native.invokeMethod('callAudio'); } catch (_) {}
                   return null;
                 });
+                c.addJavaScriptHandler(handlerName: 'openExternal', callback: (args) async {
+                  try { return await _native.invokeMethod('openExternal', {'url': args.isNotEmpty ? '${args[0]}' : ''}); } catch (_) { return false; }
+                });
                 c.addJavaScriptHandler(handlerName: 'audioReset', callback: (args) async {
                   try { await _native.invokeMethod('audioReset'); } catch (_) {}
                   return true;
