@@ -7,6 +7,10 @@ import android.os.Bundle
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import android.media.AudioAttributes
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -95,6 +99,22 @@ class MainActivity : FlutterActivity() {
                         }
                     } catch (e: Exception) {}
                     result.success(null)
+                }
+                "vibrate" -> {
+                    // Sonnerie d'un appel entrant : vibration répétée, sauf si le téléphone est en mode silencieux
+                    val on = (call.arguments as? Boolean) ?: false
+                    try {
+                        val vib: Vibrator = if (Build.VERSION.SDK_INT >= 31) (getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+                                            else @Suppress("DEPRECATION") (getSystemService(Context.VIBRATOR_SERVICE) as Vibrator)
+                        val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                        if (on && am.ringerMode != AudioManager.RINGER_MODE_SILENT) {
+                            val pattern = longArrayOf(0, 700, 600)
+                            val attrs = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+                            if (Build.VERSION.SDK_INT >= 26) vib.vibrate(VibrationEffect.createWaveform(pattern, 0), attrs)
+                            else @Suppress("DEPRECATION") vib.vibrate(pattern, 0, attrs)
+                        } else vib.cancel()
+                        result.success(true)
+                    } catch (e: Exception) { result.success(false) }
                 }
                 "audioReset" -> {
                     val am = getSystemService(Context.AUDIO_SERVICE) as AudioManager
