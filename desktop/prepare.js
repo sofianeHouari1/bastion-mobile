@@ -10,6 +10,7 @@ fs.copyFileSync(path.join(__dirname, b.icon), path.join(__dirname, "icon.png"));
 fs.copyFileSync(path.join(__dirname, b.icon), path.join(__dirname, "build", "icon.png"));
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
 pkg.productName = b.name;
+pkg.name = m + "-desktop";            // dossier d'installation et données propres à chaque marque (sinon Bastion et My Self Therapy s'écrasent)
 pkg.version = "1.0." + build;
 pkg.build = {
   appId: b.appId,
