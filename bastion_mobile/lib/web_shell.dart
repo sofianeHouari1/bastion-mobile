@@ -223,6 +223,10 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                   try { await _native.invokeMethod('callAudio'); } catch (_) {}
                   return null;
                 });
+                // Appel / visio en cours : le micro continue de capter écran verrouillé (service natif de premier plan).
+                c.addJavaScriptHandler(handlerName: 'callActive', callback: (args) async {
+                  try { return await _native.invokeMethod('callActive', args.isNotEmpty && args[0] == true); } catch (_) { return false; }
+                });
                 c.addJavaScriptHandler(handlerName: 'vibrate', callback: (args) async {
                   try { return await _native.invokeMethod('vibrate', args.isNotEmpty && args[0] == true); } catch (_) { return false; }
                 });

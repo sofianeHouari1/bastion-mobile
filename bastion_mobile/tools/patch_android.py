@@ -5,7 +5,7 @@ import glob, os, re, shutil
 p = 'android/app/src/main/AndroidManifest.xml'
 s = open(p).read()
 names = ['INTERNET', 'CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'ACCESS_NETWORK_STATE', 'BLUETOOTH_CONNECT', 'WAKE_LOCK',
-         'POST_NOTIFICATIONS', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_REMOTE_MESSAGING', 'RECEIVE_BOOT_COMPLETED',
+         'POST_NOTIFICATIONS', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_REMOTE_MESSAGING', 'FOREGROUND_SERVICE_MICROPHONE', 'RECEIVE_BOOT_COMPLETED',
          'USE_FULL_SCREEN_INTENT', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'VIBRATE']
 perms = ''.join('    <uses-permission android:name="android.permission.%s"/>\n' % x for x in names)
 s = s.replace('<application', perms + '    <application', 1)
@@ -49,6 +49,11 @@ for g in ('android/app/build.gradle.kts', 'android/app/build.gradle'):
 kt = glob.glob('android/app/src/main/kotlin/**/MainActivity.kt', recursive=True)[0]
 pkg = re.search(r'package\s+([\w.]+)', open(kt).read()).group(1)
 open(kt, 'w').write(open('android_res/MainActivity.kt.tmpl').read().replace('__PKG__', pkg))
+# service « appel en cours » (micro écran verrouillé), déclaré avec le nom complet de sa classe
+m = open('android/app/src/main/AndroidManifest.xml').read()
+if 'CallService' not in m:
+    m = m.replace('</application>', '        <service android:name="%s.CallService" android:exported="false" android:foregroundServiceType="microphone"/>\n    </application>' % pkg, 1)
+    open('android/app/src/main/AndroidManifest.xml', 'w').write(m)
 print('patch Android applique, package', pkg)
 
 # --- Icone de l'application (bouclier Bastion)

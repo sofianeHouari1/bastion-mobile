@@ -11,6 +11,12 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
 import android.media.AudioAttributes
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.Service
+import android.content.pm.ServiceInfo
+import android.os.IBinder
+import android.os.PowerManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -100,6 +106,16 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) {}
                     result.success(null)
                 }
+                // Appel ou visio en cours : service « micro » au premier plan + maintien du processeur, pour que le micro
+                // continue de capter quand l'écran se verrouille (sinon Android coupe le micro au bout de quelques secondes).
+                "callActive" -> {
+                    val on = (call.arguments as? Boolean) ?: false
+                    try {
+                        val svc = Intent(this, CallService::class.java)
+                        if (on) { if (Build.VERSION.SDK_INT >= 26) startForegroundService(svc) else startService(svc) } else stopService(svc)
+                        result.success(true)
+                    } catch (e: Exception) { result.success(false) }
+                }
                 "vibrate" -> {
                     // Sonnerie d'un appel entrant : vibration répétée, sauf si le téléphone est en mode silencieux
                     val on = (call.arguments as? Boolean) ?: false
@@ -158,5 +174,42 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+}
+
+
+/** Service de premier plan pendant un appel : autorise le micro écran verrouillé et garde le processeur éveillé. */
+class CallService : Service() {
+    private var lock: PowerManager.WakeLock? = null
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel("call_ongoing") == null) {
+            nm.createNotificationChannel(NotificationChannel("call_ongoing", "Appel en cours", NotificationManager.IMPORTANCE_LOW))
+        }
+        val open = packageManager.getLaunchIntentForPackage(packageName)
+        val pi = android.app.PendingIntent.getActivity(this, 7, open, android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, "call_ongoing") else @Suppress("DEPRECATION") Notification.Builder(this)
+        val icon = resources.getIdentifier("ic_stat_bastion", "drawable", packageName).let { if (it != 0) it else applicationInfo.icon }
+        val n = b.setContentTitle("Appel en cours").setContentText("Touchez pour revenir à l'appel").setSmallIcon(icon)
+            .setOngoing(true).setContentIntent(pi).build()
+        try {
+            if (Build.VERSION.SDK_INT >= 30) startForeground(4343, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            else startForeground(4343, n)
+        } catch (e: Exception) { stopSelf(); return START_NOT_STICKY }
+        if (lock == null) {
+            lock = (getSystemService(Context.POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "bastion:call").apply {
+                setReferenceCounted(false); acquire(4 * 60 * 60 * 1000L)
+            }
+        }
+        return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        try { lock?.release() } catch (e: Exception) {}
+        lock = null
+        super.onDestroy()
     }
 }
