@@ -10,6 +10,9 @@ const BASE = HOST.split(".").slice(-2).join(".");          // myselftherapy.eu :
 const ours = (u) => { try { const x = new URL(u); return x.protocol === "https:" && (x.hostname === BASE || x.hostname.endsWith("." + BASE)); } catch (e) { return false; } };
 const ICON = path.join(__dirname, "icon.png");
 
+// Caméra : sur certains PC (pilotes Samsung notamment), la capture vidéo « Media Foundation » de Chromium échoue
+// alors que Firefox voit la caméra. On force l'ancienne méthode (DirectShow), qui marche partout.
+app.commandLine.appendSwitch("disable-features", "MediaFoundationVideoCapture");
 app.setAppUserModelId(cfg.appId);                            // notifications Windows au nom de l'appli
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
