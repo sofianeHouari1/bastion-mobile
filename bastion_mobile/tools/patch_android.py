@@ -24,7 +24,15 @@ links = ('        <intent-filter android:autoVerify="true">\n'
          '            <category android:name="android.intent.category.BROWSABLE"/>\n'
          '            <data android:scheme="https" android:host="bastion-secure.group" android:pathPrefix="/webrtc-ihm/"/>\n'
          '        </intent-filter>\n')
-s = s.replace('</activity>', links + '        </activity>', 1)
+# Menu « Partager » d'Android : Bastion apparait dans la liste pour envoyer un fichier ou un texte a un contact
+share = ''.join('        <intent-filter>\n'
+                '            <action android:name="android.intent.action.%s"/>\n'
+                '            <category android:name="android.intent.category.DEFAULT"/>\n'
+                '            <data android:mimeType="*/*"/>\n'
+                '        </intent-filter>\n' % a for a in ('SEND', 'SEND_MULTIPLE'))
+s = s.replace('</activity>', links + share + '        </activity>', 1)
+# une seule fenetre Bastion : un partage arrive dans l'appli deja ouverte (sans relancer une 2e session pendant un appel)
+s = s.replace('android:launchMode="singleTop"', 'android:launchMode="singleTask"', 1)
 open(p, 'w').write(s)
 
 # --- Sonneries natives

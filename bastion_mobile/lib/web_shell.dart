@@ -40,6 +40,8 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
     initNotifications(onTap: _onNotificationTap);
     _native.setMethodCallHandler((call) async {
       if (call.method == 'openLink') _openLink(call.arguments as String?);
+      // Fichier partagé depuis une autre appli alors que Bastion est déjà ouvert : la page vient le chercher.
+      if (call.method == 'share') _web?.evaluateJavascript(source: 'window.__bmShareReady && window.__bmShareReady()').catchError((_) => null);
       return null;
     });
   }
@@ -226,6 +228,10 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                 // Appel / visio en cours : le micro continue de capter écran verrouillé (service natif de premier plan).
                 c.addJavaScriptHandler(handlerName: 'callActive', callback: (args) async {
                   try { return await _native.invokeMethod('callActive', args.isNotEmpty && args[0] == true); } catch (_) { return false; }
+                });
+                // Partage Android (« Partager » depuis une autre appli) : la page récupère les fichiers en attente.
+                c.addJavaScriptHandler(handlerName: 'takeShare', callback: (args) async {
+                  try { return await _native.invokeMethod('takeShare'); } catch (_) { return null; }
                 });
                 c.addJavaScriptHandler(handlerName: 'vibrate', callback: (args) async {
                   try { return await _native.invokeMethod('vibrate', args.isNotEmpty && args[0] == true); } catch (_) { return false; }

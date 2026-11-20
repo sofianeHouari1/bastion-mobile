@@ -26,14 +26,65 @@ class MainActivity : FlutterActivity() {
     private var pendingLink: String? = null
     private var channel: MethodChannel? = null
 
+    // Fichiers / texte partagés depuis une autre appli (menu « Partager » d'Android)
+    private var pendingShare: Intent? = null
+    private fun isShare(i: Intent?) = i?.action == Intent.ACTION_SEND || i?.action == Intent.ACTION_SEND_MULTIPLE
+
+    /** Lit les fichiers partagés (15 Mo au total au plus) : nom, type et contenu en base64, pour la page. */
+    private fun readShare(i: Intent): Map<String, Any?> {
+        val uris = ArrayList<android.net.Uri>()
+        try {
+            if (i.action == Intent.ACTION_SEND_MULTIPLE) {
+                @Suppress("DEPRECATION")
+                i.getParcelableArrayListExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.let { uris.addAll(it) }
+            } else {
+                @Suppress("DEPRECATION")
+                (i.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM))?.let { uris.add(it) }
+            }
+        } catch (e: Exception) {}
+        val files = ArrayList<Map<String, Any?>>()
+        val skipped = ArrayList<String>()
+        var total = 0L
+        for (u in uris.take(10)) {
+            var name = u.lastPathSegment ?: "fichier"
+            try {
+                contentResolver.query(u, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst() && !c.isNull(0)) name = c.getString(0)
+                }
+            } catch (e: Exception) {}
+            name = name.substringAfterLast('/')
+            try {
+                val bytes = contentResolver.openInputStream(u)?.use { inp ->
+                    val out = java.io.ByteArrayOutputStream()
+                    val buf = ByteArray(65536)
+                    var n: Int
+                    var over = false
+                    while (true) {
+                        n = inp.read(buf); if (n < 0) break
+                        if (total + out.size() + n > 15L * 1048576) { over = true; break }
+                        out.write(buf, 0, n)
+                    }
+                    if (over) null else out.toByteArray()
+                }
+                if (bytes == null) { skipped.add(name); continue }
+                total += bytes.size
+                val type = contentResolver.getType(u) ?: i.type ?: "application/octet-stream"
+                files.add(mapOf("name" to name, "type" to type, "b64" to android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)))
+            } catch (e: Exception) { skipped.add(name) }
+        }
+        return mapOf("text" to (i.getStringExtra(Intent.EXTRA_TEXT) ?: ""), "files" to files, "skipped" to skipped)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         if (intent?.action == Intent.ACTION_VIEW) pendingLink = intent?.dataString
+        if (isShare(intent)) pendingShare = intent
         super.onCreate(savedInstanceState)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (isShare(intent)) { pendingShare = intent; channel?.invokeMethod("share", null) }
         val link = if (intent.action == Intent.ACTION_VIEW) intent.dataString else null
         if (link != null) {
             val ch = channel
@@ -57,6 +108,15 @@ class MainActivity : FlutterActivity() {
         ch.setMethodCallHandler { call, result ->
             when (call.method) {
                 "initialLink" -> { result.success(pendingLink); pendingLink = null }
+                "takeShare" -> {
+                    val i = pendingShare
+                    pendingShare = null
+                    if (i == null) result.success(null)
+                    else Thread {
+                        val m = try { readShare(i) } catch (e: Exception) { null }
+                        runOnUiThread { result.success(m) }
+                    }.start()
+                }
                 "openExternal" -> {
                     // Mise a jour de l'appli : le telechargement de l'APK s'ouvre dans le navigateur du telephone
                     val u = call.argument<String>("url") ?: ""
