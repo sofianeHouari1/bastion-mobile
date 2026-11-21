@@ -75,7 +75,71 @@ class MainActivity : FlutterActivity() {
         return mapOf("text" to (i.getStringExtra(Intent.EXTRA_TEXT) ?: ""), "files" to files, "skipped" to skipped)
     }
 
+    // ---------- Mise à jour de l'appli en un geste (sans Play Store) ----------
+    // La page fournit l'adresse de la nouvelle version sur le serveur de l'instance et son empreinte SHA-256 :
+    // l'appli télécharge, vérifie, puis confie le fichier à l'installateur d'Android (un seul bouton « Installer »).
+    private var pendingInstall: java.io.File? = null
+    private val INSTALL_STATUS = "fr.bastion.INSTALL_STATUS"
+
+    private fun downloadUpdate(url: String, sha: String, result: MethodChannel.Result) {
+        Thread {
+            val r = try {
+                val f = java.io.File(cacheDir, "mise-a-jour.apk")
+                val c = java.net.URL(url).openConnection() as java.net.HttpURLConnection
+                try { android.webkit.CookieManager.getInstance().getCookie(url)?.let { c.setRequestProperty("Cookie", it) } } catch (e: Exception) {}
+                c.connectTimeout = 20000; c.readTimeout = 60000
+                if (c.responseCode != 200) throw Exception("HTTP " + c.responseCode)
+                val md = java.security.MessageDigest.getInstance("SHA-256")
+                c.inputStream.use { inp -> f.outputStream().use { out ->
+                    val b = ByteArray(65536)
+                    while (true) { val n = inp.read(b); if (n < 0) break; md.update(b, 0, n); out.write(b, 0, n) }
+                } }
+                val hex = md.digest().joinToString("") { "%02x".format(it) }
+                if (sha.isNotEmpty() && hex != sha.lowercase()) { f.delete(); throw Exception("empreinte") }
+                f
+            } catch (e: Exception) { null }
+            runOnUiThread {
+                if (r == null) { result.success("erreur"); return@runOnUiThread }
+                if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                    // première fois : Android demande d'autoriser cette appli à installer ses mises à jour
+                    pendingInstall = r
+                    try { startActivity(Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:" + packageName))) } catch (e: Exception) {}
+                    result.success("autoriser")
+                } else result.success(if (installApk(r)) "ok" else "erreur")
+            }
+        }.start()
+    }
+
+    private fun installApk(f: java.io.File): Boolean = try {
+        val pi = packageManager.packageInstaller
+        val id = pi.createSession(android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL))
+        pi.openSession(id).use { s ->
+            s.openWrite("app.apk", 0, f.length()).use { o -> f.inputStream().use { it.copyTo(o) }; s.fsync(o) }
+            val i = Intent(this, MainActivity::class.java).setAction(INSTALL_STATUS)
+            val fl = if (Build.VERSION.SDK_INT >= 31) android.app.PendingIntent.FLAG_MUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT
+                     else android.app.PendingIntent.FLAG_UPDATE_CURRENT
+            s.commit(android.app.PendingIntent.getActivity(this, 7301, i, fl).intentSender)
+        }
+        true
+    } catch (e: Exception) { false }
+
+    private fun installStatus(i: Intent?) {
+        if (i?.action != INSTALL_STATUS) return
+        if (i.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, -999) == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            @Suppress("DEPRECATION")
+            val confirm = i.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+            if (confirm != null) try { startActivity(confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) {}
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val f = pendingInstall
+        if (f != null && (Build.VERSION.SDK_INT < 26 || packageManager.canRequestPackageInstalls())) { pendingInstall = null; installApk(f) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        installStatus(intent)
         if (intent?.action == Intent.ACTION_VIEW) pendingLink = intent?.dataString
         if (isShare(intent)) pendingShare = intent
         super.onCreate(savedInstanceState)
@@ -84,6 +148,7 @@ class MainActivity : FlutterActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        installStatus(intent)
         if (isShare(intent)) { pendingShare = intent; channel?.invokeMethod("share", null) }
         val link = if (intent.action == Intent.ACTION_VIEW) intent.dataString else null
         if (link != null) {
@@ -108,6 +173,10 @@ class MainActivity : FlutterActivity() {
         ch.setMethodCallHandler { call, result ->
             when (call.method) {
                 "initialLink" -> { result.success(pendingLink); pendingLink = null }
+                "installUpdate" -> {
+                    val url = call.argument<String>("url") ?: ""
+                    if (!url.startsWith("https://")) result.success("erreur") else downloadUpdate(url, call.argument<String>("sha") ?: "", result)
+                }
                 "takeShare" -> {
                     val i = pendingShare
                     pendingShare = null

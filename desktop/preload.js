@@ -6,5 +6,7 @@ contextBridge.exposeInMainWorld("bastionDesktop", {
   incomingCall: (o) => ipcRenderer.send("incoming-call", { name: s(o && o.name, 120) }),
   callEnded: () => ipcRenderer.send("call-ended"),
   badge: (n) => ipcRenderer.send("badge", Number(n) || 0),
-  openExternal: (u) => ipcRenderer.send("open-external", s(u, 2000))
+  openExternal: (u) => ipcRenderer.send("open-external", s(u, 2000)),
+  autoUpdate: (o) => ipcRenderer.send("auto-update", { n: Number(o && o.n) || 0, url: s(o && o.url, 2000), sha: s(o && o.sha, 64) }),
+  callState: (on) => ipcRenderer.send("call-state", !!on)
 });

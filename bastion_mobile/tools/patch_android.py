@@ -6,7 +6,7 @@ p = 'android/app/src/main/AndroidManifest.xml'
 s = open(p).read()
 names = ['INTERNET', 'CAMERA', 'RECORD_AUDIO', 'MODIFY_AUDIO_SETTINGS', 'ACCESS_NETWORK_STATE', 'BLUETOOTH_CONNECT', 'WAKE_LOCK',
          'POST_NOTIFICATIONS', 'FOREGROUND_SERVICE', 'FOREGROUND_SERVICE_REMOTE_MESSAGING', 'FOREGROUND_SERVICE_MICROPHONE', 'RECEIVE_BOOT_COMPLETED',
-         'USE_FULL_SCREEN_INTENT', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'VIBRATE']
+         'USE_FULL_SCREEN_INTENT', 'REQUEST_IGNORE_BATTERY_OPTIMIZATIONS', 'VIBRATE', 'REQUEST_INSTALL_PACKAGES']
 perms = ''.join('    <uses-permission android:name="android.permission.%s"/>\n' % x for x in names)
 s = s.replace('<application', perms + '    <application', 1)
 s = s.replace('android:label="bastion_mobile"', 'android:label="Bastion"')

@@ -230,6 +230,15 @@ class _WebShellState extends State<WebShell> with WidgetsBindingObserver {
                   try { return await _native.invokeMethod('callActive', args.isNotEmpty && args[0] == true); } catch (_) { return false; }
                 });
                 // Partage Android (« Partager » depuis une autre appli) : la page récupère les fichiers en attente.
+                // Fonctions natives présentes dans cette version de l'appli (la page s'adapte aux anciennes versions)
+                c.addJavaScriptHandler(handlerName: 'caps', callback: (args) async => ['installUpdate', 'share']);
+                // Mise à jour de l'appli : téléchargement par l'appli puis installateur Android (un seul geste)
+                c.addJavaScriptHandler(handlerName: 'installUpdate', callback: (args) async {
+                  try {
+                    final o = (args.isNotEmpty && args[0] is Map) ? Map<String, dynamic>.from(args[0] as Map) : <String, dynamic>{};
+                    return await _native.invokeMethod('installUpdate', {'url': (o['url'] ?? '').toString(), 'sha': (o['sha'] ?? '').toString()});
+                  } catch (_) { return 'erreur'; }
+                });
                 c.addJavaScriptHandler(handlerName: 'takeShare', callback: (args) async {
                   try { return await _native.invokeMethod('takeShare'); } catch (_) { return null; }
                 });

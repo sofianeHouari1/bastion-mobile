@@ -2,6 +2,7 @@
 // (à côté de l'horloge) quand on la ferme, pour recevoir les appels et les messages. Aucun pistage, aucun service tiers.
 const { app, BrowserWindow, Tray, Menu, shell, session, Notification, desktopCapturer, ipcMain, nativeImage } = require("electron");
 const path = require("path");
+const fs = require("fs"), crypto = require("crypto"), { spawn } = require("child_process");
 const cfg = require("./config.json");
 
 const START = new URL(cfg.url);
@@ -17,7 +18,9 @@ app.setAppUserModelId(cfg.appId);                            // notifications Wi
 if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 
 let win = null, tray = null, quitting = false;
-const startHidden = process.argv.includes("--hidden");
+// après une mise à jour faite en arrière-plan, l'appli repart discrètement dans la zone de notification
+const HIDDEN_FLAG = path.join(app.getPath("userData"), ".start-hidden");
+const startHidden = process.argv.includes("--hidden") || (() => { try { fs.unlinkSync(HIDDEN_FLAG); return true; } catch (e) { return false; } })();
 
 function show() {
   if (!win) return create(false);
@@ -54,7 +57,7 @@ function buildTray() {
     { label: "Lancer au démarrage de Windows", type: "checkbox", checked: app.getLoginItemSettings().openAtLogin,
       click: (it) => app.setLoginItemSettings({ openAtLogin: it.checked, args: ["--hidden"] }) },
     { type: "separator" },
-    { label: "Quitter (plus d'appels ni de notifications)", click: () => { quitting = true; app.quit(); } }
+    { label: "Quitter (plus d'appels ni de notifications)", click: () => { quitting = true; if (upd.ready && !callOn) runInstaller(false, false); app.quit(); } }
   ]);
   tray.setContextMenu(menu());
   tray.on("click", show);
@@ -77,9 +80,59 @@ app.whenReady().then(() => {
     app.setLoginItemSettings({ openAtLogin: true, args: ["--hidden"] });     // 1re ouverture : joignable dès l'allumage du PC
     try { require("fs").writeFileSync(path.join(app.getPath("userData"), ".installed"), "1"); } catch (e) {}
   }
+  if (installPending(startHidden)) return;      // mise à jour téléchargée la dernière fois : on l'installe avant d'ouvrir
   buildTray();
   create(startHidden);
+  setInterval(() => { if (upd.ready && !callOn && win && !win.isVisible()) runInstaller(true); }, 10 * 60 * 1000);
 });
+
+/* ---------- Mise à jour automatique ----------
+   La page signale une nouvelle version (même serveur, même session) : l'appli la télécharge en arrière-plan, vérifie
+   son empreinte, puis l'installe sans fenêtre quand elle est en veille dans la zone de notification (jamais pendant
+   un appel), ou au prochain démarrage. */
+const UPD_DIR = path.join(app.getPath("userData"), "maj"), UPD_META = path.join(UPD_DIR, "pending.json");
+const upd = { busy: false, ready: null };
+let callOn = false;
+function installPending(hidden) {
+  try {
+    const p = JSON.parse(fs.readFileSync(UPD_META, "utf8"));
+    if (p.n > (cfg.build || 0) && fs.existsSync(p.f)) { upd.ready = p; return runInstaller(hidden); }
+    fs.rmSync(UPD_DIR, { recursive: true, force: true });                 // déjà installée : ménage
+  } catch (e) {}
+  return false;
+}
+function runInstaller(hiddenAfter, relaunch = true) {
+  const p = upd.ready; if (!p) return false;
+  try {
+    fs.unlinkSync(UPD_META);
+    if (hiddenAfter && relaunch) fs.writeFileSync(HIDDEN_FLAG, "1");
+    // petite attente : l'appli se ferme, puis l'installateur remplace les fichiers sans fenêtre et relance l'appli
+    spawn("cmd.exe", ["/d", "/c", 'ping -n 4 127.0.0.1 >nul & "' + p.f + '" /S' + (relaunch ? " --force-run" : "")],
+      { detached: true, stdio: "ignore", windowsHide: true }).unref();
+    upd.ready = null;
+    if (relaunch) { quitting = true; app.quit(); }
+    return true;
+  } catch (e) { return false; }
+}
+async function fetchUpdate(o) {
+  const n = parseInt(o && o.n, 10) || 0;
+  if (!(n > (cfg.build || 0)) || upd.busy || (upd.ready && upd.ready.n >= n) || !ours(o.url)) return;
+  upd.busy = true;
+  try {
+    const r = await session.defaultSession.fetch(o.url, { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const buf = Buffer.from(await r.arrayBuffer());
+    if (buf.length < 1e6) throw new Error("fichier trop petit");
+    if (o.sha && crypto.createHash("sha256").update(buf).digest("hex") !== String(o.sha).toLowerCase()) throw new Error("empreinte");
+    fs.mkdirSync(UPD_DIR, { recursive: true });
+    const f = path.join(UPD_DIR, "installation-" + n + ".exe");
+    fs.writeFileSync(f, buf);
+    upd.ready = { n, f };
+    fs.writeFileSync(UPD_META, JSON.stringify(upd.ready));
+  } catch (e) {} finally { upd.busy = false; }
+}
+ipcMain.on("auto-update", (e, o) => { fetchUpdate(o); });
+ipcMain.on("call-state", (e, on) => { callOn = !!on; });
 
 ipcMain.on("notify", (e, o) => {
   if (win && win.isVisible() && win.isFocused()) return;
@@ -88,9 +141,10 @@ ipcMain.on("notify", (e, o) => {
 });
 let callNote = null;
 ipcMain.on("incoming-call", (e, o) => {
+  callOn = true;
   show(); if (win) { win.setAlwaysOnTop(true); setTimeout(() => win && win.setAlwaysOnTop(false), 1500); win.flashFrame(true); }
   try { callNote = new Notification({ title: "Appel entrant", body: o.name || "", icon: ICON, urgency: "critical", timeoutType: "never" }); callNote.on("click", show); callNote.show(); } catch (x) {}
 });
-ipcMain.on("call-ended", () => { if (win) win.flashFrame(false); try { callNote && callNote.close(); } catch (x) {} callNote = null; });
+ipcMain.on("call-ended", () => { callOn = false; if (win) win.flashFrame(false); try { callNote && callNote.close(); } catch (x) {} callNote = null; });
 ipcMain.on("badge", (e, n) => { if (win) win.setTitle(n > 0 ? "(" + n + ") " + cfg.name : cfg.name); });
 ipcMain.on("open-external", (e, u) => { if (/^https:\/\//.test(u)) shell.openExternal(u); });
